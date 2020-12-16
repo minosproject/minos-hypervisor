@@ -39,6 +39,7 @@ struct vmtag {
 	uint64_t setup_data;
 	uint64_t flags;
 	uint32_t vcpu_affinity[8];
+	uint64_t image_copy[12]; // <dst src size>...
 };
 
 #define IOCTL_CREATE_VM			0xf000

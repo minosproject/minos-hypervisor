@@ -97,6 +97,8 @@ int parse_vm_info_of(struct device_node *node, struct vmtag *vmtag)
 	of_get_u32_array(node, "vcpu_affinity",
 			vmtag->vcpu_affinity, vmtag->nr_vcpu);
 	of_get_u64_array(node, "setup_data", (uint64_t *)&vmtag->setup_data, 1);
+	of_get_u64_array(node, "image_copy", vmtag->image_copy,
+			 ARRAY_SIZE(vmtag->image_copy));
 
 	if (of_get_bool(node, "vm_32bit"))
 		vmtag->flags &= ~VM_FLAGS_64BIT;
