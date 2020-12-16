@@ -23,6 +23,8 @@
 #include <virt/virt.h>
 #endif
 
+int vmm_task(void *data);
+
 static int init_task(void *main)
 {
 #ifdef CONFIG_SHELL
@@ -72,6 +74,8 @@ static int init_task(void *main)
 
 	create_realtime_task("shell_task", shell_task,
 			tty, CONFIG_SHELL_TASK_PRIO, 4096, 0);
+	create_migrating_task("vmm_task", vmm_task, NULL, OS_PRIO_DEFAULT, 4096,
+			      0);
 #else
 #ifdef CONFIG_VIRT
 	start_all_vm();

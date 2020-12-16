@@ -720,14 +720,29 @@ unmap_vmtag:
 	return ret;
 }
 
+bool vm_get_reset(struct vm *vm)
+{
+	return vm->pending_reset;
+}
+
+void vm_set_reset(struct vm *vm, bool reset)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&vm->lock, flags);
+	vm->pending_reset = reset;
+	spin_unlock_irqrestore(&vm->lock, flags);
+}
+
 static int __vm_reset(struct vm *vm, void *args, int byself)
 {
 	int ret;
 	struct vdev *vdev;
 	struct vcpu *vcpu;
 
+#if 0
 	if (vm_is_native(vm))
 		panic("native vm can not call reset vm\n");
+#endif
 
 	/* set the vm to offline state */
 	pr_notice("reset vm-%d by %s\n",
@@ -776,7 +791,10 @@ static int __vm_reset(struct vm *vm, void *args, int byself)
 
 	vm_virq_reset(vm);
 
-	if (byself) {
+	if (vm_is_native(vm)) {
+		preempt_enable();
+		vm_set_reset(vm, true);
+	} else if (byself) {
 		trap_vcpu_nonblock(VMTRAP_TYPE_COMMON,
 				VMTRAP_REASON_REBOOT, 0, NULL);
 		preempt_enable();
@@ -896,6 +914,20 @@ static void vm_setup(struct vm *vm)
 				MEM_BLOCK_SIZE, 0);
 	}
 
+	if (vm->image_copy) {
+		int i;
+		for (i = 0; i < ARRAY_SIZE(vm->image_copy) / 3 &&
+			    vm->image_copy[i + 2] > 0;
+		     i++) {
+			create_host_mapping(vm->image_copy[i],
+					    vm->image_copy[i],
+					    vm->image_copy[i + 2], 0);
+			create_host_mapping(vm->image_copy[i + 1],
+					    vm->image_copy[i + 1],
+					    vm->image_copy[i + 2], 0);
+		}
+	}
+
 	/* 
 	 * here need to create the resource based on the vm's
 	 * os, when the os is a linux system, usually it will
@@ -916,10 +948,12 @@ static void vm_setup(struct vm *vm)
 	os_setup_vm(vm);
 	do_hooks(vm, NULL, OS_HOOK_SETUP_VM);
 
+#if 0
 	if (vm->setup_data) {
 		destroy_host_mapping((vir_addr_t)vm->setup_data,
 				MEM_BLOCK_SIZE);
 	}
+#endif
 }
 
 void destroy_vm(struct vm *vm)
@@ -1056,6 +1090,7 @@ static struct vm *__create_vm(struct vmtag *vme)
 	init_list(&vm->vdev_list);
 	memcpy(vm->vcpu_affinity, vme->vcpu_affinity,
 			sizeof(uint32_t) * VM_MAX_VCPU);
+	memcpy(vm->image_copy, vme->image_copy, sizeof(vm->image_copy));
 	vm->flags |= vme->flags;
 
 	vms[vme->vmid] = vm;
@@ -1256,6 +1291,17 @@ int virt_init(void)
 void start_vm(int vmid)
 {
 	struct vcpu *vcpu = get_vcpu_by_id(vmid, 0);
+	struct vm *vm = get_vm_by_id(vmid);
+
+	if (vm->image_copy) {
+		int i;
+		for (i = 0; i < ARRAY_SIZE(vm->image_copy) / 3 &&
+			    vm->image_copy[i + 2] > 0;
+		     i++) {
+			memcpy(vm->image_copy[i], vm->image_copy[i + 1],
+			       vm->image_copy[i + 2]);
+		}
+	}
 
 	if (vcpu)
 		vcpu_online(vcpu);
@@ -1284,6 +1330,9 @@ static int vm_command_hdl(int argc, char **argv)
 			start_all_vm();
 		else
 			start_vm(vmid);
+	} else if (argc > 2 && strcmp(argv[1], "reset") == 0) {
+		vmid = atoi(argv[2]);
+		vm_reset(vmid, NULL, 0);
 	}
 
 	return 0;

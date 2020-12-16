@@ -98,6 +98,10 @@ struct vm {
 	void *os_data;
 
 	void *arch_data;
+
+	uint64_t image_copy[12];
+	spinlock_t lock;
+	bool pending_reset;
 } __align(sizeof(unsigned long));
 
 #define vm_name(vm)	devnode_name(vm->dev_node)
@@ -186,6 +190,9 @@ int vm_power_up(int vmid);
 int vm_reset(int vmid, void *args, int byself);
 int vm_power_off(int vmid, void *arg, int byself);
 int vm_suspend(int vmid);
+
+bool vm_get_reset(struct vm *vm);
+void vm_set_reset(struct vm *vm, bool reset);
 
 static inline struct vm *get_vm_by_id(uint32_t vmid)
 {
